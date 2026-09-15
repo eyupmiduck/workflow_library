@@ -43,6 +43,12 @@ jobs:
           distribution: temurin
           java-version: ${{ inputs.java-version }}
           cache: maven
+          # Writes a ~/.m2/settings.xml server entry (id `github`) so Maven can
+          # authenticate to GitHub Packages. Consumers must grant this
+          # repository read access to any package it depends on.
+          server-id: github
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Set up Python and SQLFluff
         run: pip install sqlfluff
