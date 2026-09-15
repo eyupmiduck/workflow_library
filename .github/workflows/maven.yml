@@ -2,6 +2,27 @@ name: Maven Build
 
 on:
   workflow_call:
+    inputs:
+      java-version:
+        description: JDK version to build with.
+        type: string
+        default: "25"
+      postgres-versions:
+        description: JSON array of PostgreSQL image tags to build and test against.
+        type: string
+        default: '["postgres:16-alpine","postgres:17-alpine","postgres:18-alpine"]'
+      postgres-image-script:
+        description: Script that builds the custom PostgreSQL image; receives the base tag as its first argument.
+        type: string
+        default: scripts/build-postgres-image.sh
+      postgres-image-prefix:
+        description: Prefix for the built PostgreSQL image tag; the matrix value is appended.
+        type: string
+        default: ddl-utils-
+      maven-command:
+        description: Maven command to run; the postgres.image property is appended to it.
+        type: string
+        default: ./mvnw --batch-mode clean verify
 
 jobs:
   build:
@@ -10,27 +31,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        postgres:
-          - postgres:16-alpine
-          - postgres:17-alpine
-          - postgres:18-alpine
+        postgres: ${{ fromJSON(inputs.postgres-versions) }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Java 25
+      - name: Set up Java ${{ inputs.java-version }}
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "25"
+          java-version: ${{ inputs.java-version }}
           cache: maven
 
       - name: Set up Python and SQLFluff
         run: pip install sqlfluff
 
       - name: Build custom PostgreSQL image
-        run: scripts/build-postgres-image.sh ${{ matrix.postgres }}
+        run: ${{ inputs.postgres-image-script }} ${{ matrix.postgres }}
 
       - name: Build and test
-        run: ./mvnw --batch-mode clean verify -Dpostgres.image=ddl-utils-${{ matrix.postgres }}
+        run: ${{ inputs.maven-command }} -Dpostgres.image=${{ inputs.postgres-image-prefix }}${{ matrix.postgres }}
