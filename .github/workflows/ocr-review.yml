@@ -1,0 +1,63 @@
+name: OpenCodeReview PR Review
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  code-review:
+    name: Review pull request
+    # Run on opened PRs, or on human-authored comments starting with
+    # /open-code-review. issue_comment triggers are gated on author_association
+    # so only repository collaborators can spend LLM quota.
+    if: |
+      (
+        github.event_name == 'pull_request_target'
+        && github.event.pull_request.draft == false
+      )
+      || (
+        github.event_name == 'issue_comment'
+        && github.event.issue.pull_request
+        && github.event.comment.user.type != 'Bot'
+        && (
+          github.event.comment.author_association == 'MEMBER'
+          || github.event.comment.author_association == 'OWNER'
+          || github.event.comment.author_association == 'COLLABORATOR'
+        )
+        && startsWith(github.event.comment.body, '/open-code-review')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Get PR context
+        id: pr-context
+        if: github.event_name == 'issue_comment'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const prNumber = context.issue.number;
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            core.setOutput('base_ref', pullRequest.base.ref);
+            core.setOutput('head_sha', pullRequest.head.sha);
+
+      - name: Run OpenCodeReview
+        # Advisory only: a failed review must never block merging the PR.
+        continue-on-error: true
+        uses: alibaba/open-code-review@1f5caf4d5b7d5324c6e4c836c971136e4010192e # v1.12.1
+        with:
+          ocr_version: "1.12.1"
+          # /v1 is required: the action configures OCR via `ocr config set
+          # llm.url`, which does not normalize the base path like the env var.
+          llm_url: https://api.together.xyz/v1
+          llm_auth_token: ${{ secrets.TOGETHER_API_KEY }}
+          llm_model: deepseek-ai/DeepSeek-V4.1-Flash
+          llm_use_anthropic: "false"
+          # For issue_comment triggers, pass the resolved refs; for
+          # pull_request_target the action resolves them from the event.
+          base_ref: ${{ steps.pr-context.outputs.base_ref }}
+          head_sha: ${{ steps.pr-context.outputs.head_sha }}
