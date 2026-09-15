@@ -1,5 +1,29 @@
 name: OpenCodeReview PR Review
 
+on:
+  workflow_call:
+    inputs:
+      ocr-version:
+        description: OpenCodeReview version to run.
+        type: string
+        default: "1.12.1"
+      llm-url:
+        description: Base URL of the OpenAI-compatible LLM endpoint.
+        type: string
+        required: true
+      llm-model:
+        description: Model to review with.
+        type: string
+        required: true
+      llm-use-anthropic:
+        description: Whether the endpoint speaks the Anthropic protocol.
+        type: string
+        default: "false"
+    secrets:
+      llm_auth_token:
+        description: API key for the LLM endpoint.
+        required: true
+
 permissions:
   contents: read
   pull-requests: write
@@ -50,13 +74,13 @@ jobs:
         continue-on-error: true
         uses: alibaba/open-code-review@1f5caf4d5b7d5324c6e4c836c971136e4010192e # v1.12.1
         with:
-          ocr_version: "1.12.1"
+          ocr_version: ${{ inputs.ocr-version }}
           # /v1 is required: the action configures OCR via `ocr config set
           # llm.url`, which does not normalize the base path like the env var.
-          llm_url: https://api.together.xyz/v1
-          llm_auth_token: ${{ secrets.TOGETHER_API_KEY }}
-          llm_model: deepseek-ai/DeepSeek-V4.1-Flash
-          llm_use_anthropic: "false"
+          llm_url: ${{ inputs.llm-url }}
+          llm_auth_token: ${{ secrets.llm_auth_token }}
+          llm_model: ${{ inputs.llm-model }}
+          llm_use_anthropic: ${{ inputs.llm-use-anthropic }}
           # For issue_comment triggers, pass the resolved refs; for
           # pull_request_target the action resolves them from the event.
           base_ref: ${{ steps.pr-context.outputs.base_ref }}
