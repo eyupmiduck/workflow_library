@@ -44,11 +44,12 @@ jobs:
           java-version: ${{ inputs.java-version }}
           cache: maven
           # Writes a ~/.m2/settings.xml server entry (id `github`) so Maven can
-          # authenticate to GitHub Packages. Consumers must grant this
-          # repository read access to any package it depends on.
+          # authenticate to GitHub Packages. `server-username`/`server-password`
+          # are environment variable NAMES (not values); Maven resolves them at
+          # runtime, so GITHUB_TOKEN must be exported to the Maven step below.
           server-id: github
-          server-username: ${{ github.actor }}
-          server-password: ${{ github.token }}
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
 
       - name: Set up Python and SQLFluff
         run: pip install sqlfluff
@@ -58,3 +59,5 @@ jobs:
 
       - name: Build and test
         run: ${{ inputs.maven-command }} -Dpostgres.image=${{ inputs.postgres-image-prefix }}${{ matrix.postgres }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
