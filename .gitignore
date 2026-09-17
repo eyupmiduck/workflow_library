@@ -27,3 +27,7 @@ replay_pid*
 .beads/
 .dolt/
 .beads-credential-key
+
+# IDE
+.idea/
+*.iml
