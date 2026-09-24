@@ -1,0 +1,125 @@
+name: Liquibase changelog linter
+
+# Reusable runner for the liquibase-validation changelog linter. Fetches the
+# `cli` classifier jar from GitHub Packages using the version declared in the
+# project POM, lints the changelog with the SARIF reporter, and uploads the
+# report to GitHub code scanning so findings show inline on the pull request.
+# The failing gate itself stays `./mvnw verify`; this job surfaces the findings.
+# The caller owns the pull_request trigger and the top-level concurrency.
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        description: JDK version to build with.
+        type: string
+        default: "25"
+      maven-module:
+        description: Maven module holding the changelog, passed to -pl when fetching the linter CLI.
+        type: string
+        default: "."
+      linter-version-property:
+        description: POM property holding the linter version (single source of truth).
+        type: string
+        default: liquibase-validation.version
+      linter-artifact:
+        description: Maven coordinates (groupId:artifactId) of the linter CLI jar.
+        type: string
+        default: io.github.eyupmiduck:liquibase-validation
+      linter-classifier:
+        description: Classifier of the linter CLI jar.
+        type: string
+        default: cli
+      changelog-root:
+        description: Path to the Liquibase changelog root, relative to the repo root.
+        type: string
+        default: src/main/resources/db/changelog
+      config-path:
+        description: Path to the linter config file, relative to the repo root; empty skips it.
+        type: string
+        default: .liquibase-linter.yml
+      whitelist-path:
+        description: Path to the linter whitelist file, relative to the repo root; empty skips it.
+        type: string
+        default: .liquibase-linter-whitelist.yml
+      fail-on:
+        description: Minimum severity that makes the linter fail; the SARIF upload reports regardless.
+        type: string
+        default: error
+      upload-sarif:
+        description: Upload the SARIF report to GitHub code scanning.
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: read
+  security-events: write
+
+jobs:
+  lint:
+    name: Liquibase changelog linter
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Java ${{ inputs.java-version }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+          cache: maven
+          # Writes a ~/.m2/settings.xml server entry (id `github`) so Maven can
+          # authenticate to GitHub Packages. `server-username`/`server-password`
+          # are environment variable NAMES (not values); Maven resolves them at
+          # runtime, so GITHUB_TOKEN must be exported to the fetch step below.
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      # The version is read from the POM (single source of truth) rather than
+      # repeated here, and the executable `cli` classifier jar is fetched from
+      # GitHub Packages.
+      - name: Fetch the linter CLI
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MODULE: ${{ inputs.maven-module }}
+          VERSION_PROPERTY: ${{ inputs.linter-version-property }}
+          ARTIFACT: ${{ inputs.linter-artifact }}
+          CLASSIFIER: ${{ inputs.linter-classifier }}
+        run: |
+          version="$(./mvnw --batch-mode --no-transfer-progress -q -N \
+            help:evaluate -Dexpression="${VERSION_PROPERTY}" -DforceStdout)"
+          ./mvnw --batch-mode --no-transfer-progress -q -pl "${MODULE}" \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:copy \
+            -Dartifact="${ARTIFACT}:${version}:jar:${CLASSIFIER}" \
+            -DoutputDirectory="${MODULE}/target/linter-cli"
+
+      - name: Lint the changelog (SARIF)
+        # A non-zero exit is expected when the changelog has a finding; the
+        # upload below reports it, and `verify` is the gate.
+        env:
+          MODULE: ${{ inputs.maven-module }}
+          CHANGELOG_ROOT: ${{ inputs.changelog-root }}
+          CONFIG: ${{ inputs.config-path }}
+          WHITELIST: ${{ inputs.whitelist-path }}
+          FAIL_ON: ${{ inputs.fail-on }}
+        run: |
+          args=(--changelog-root "${CHANGELOG_ROOT}" --reporter sarif --fail-on "${FAIL_ON}")
+          if [[ -n "${CONFIG}" ]]; then
+            args+=(--config "${CONFIG}")
+          fi
+          if [[ -n "${WHITELIST}" ]]; then
+            args+=(--whitelist "${WHITELIST}")
+          fi
+
+          java -jar "${MODULE}"/target/linter-cli/*.jar "${args[@]}" \
+            > "${MODULE}/target/changelog-linter.sarif" || true
+
+      - name: Upload SARIF to code scanning
+        if: ${{ inputs.upload-sarif }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ inputs.maven-module }}/target/changelog-linter.sarif
