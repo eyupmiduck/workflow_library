@@ -1,0 +1,51 @@
+name: CodeQL
+
+# Reusable CodeQL static analysis. The caller owns the triggers (push,
+# pull_request, schedule) and the top-level concurrency; this workflow only
+# runs the analysis and uploads the result to code scanning.
+on:
+  workflow_call:
+    inputs:
+      languages:
+        description: CodeQL language(s) to analyze, comma-separated.
+        type: string
+        default: java-kotlin
+      build-mode:
+        description: CodeQL build mode (none, autobuild or manual).
+        type: string
+        default: none
+      config-file:
+        description: Optional path to a CodeQL config file, relative to the repo root.
+        type: string
+        default: ""
+      category:
+        description: Optional analysis category shown in code scanning; empty uses the language default.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze ${{ inputs.languages }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ inputs.languages }}
+          build-mode: ${{ inputs.build-mode }}
+          config-file: ${{ inputs.config-file }}
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: ${{ inputs.category }}

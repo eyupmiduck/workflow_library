@@ -1,0 +1,91 @@
+name: Maven Release
+
+# Reusable tag-driven Maven release: derives the version from the pushed tag,
+# runs the full build (deploy includes verify), deploys to the registry
+# configured in the project POM, then opens the matching GitHub Release.
+# The caller owns the `v*` tag trigger and the top-level concurrency.
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        description: JDK version to build with.
+        type: string
+        default: "25"
+      postgres-version:
+        description: PostgreSQL base image tag the release is built and tested against.
+        type: string
+        default: postgres:17-alpine
+      postgres-image-script:
+        description: Script that builds the custom PostgreSQL image; receives the base tag as its first argument.
+        type: string
+        default: scripts/build-postgres-image.sh
+      postgres-image-prefix:
+        description: Prefix for the built PostgreSQL image tag; the postgres version is appended.
+        type: string
+        default: ddl-utils-
+      setup-command:
+        description: Optional shell command to install build prerequisites (for example SQLFluff) before building; empty skips it.
+        type: string
+        default: pip install sqlfluff
+      maven-command:
+        description: Maven command to run; -Drevision and -Dpostgres.image are appended.
+        type: string
+        default: ./mvnw --batch-mode clean deploy
+      create-release:
+        description: Create a GitHub Release for the tag after a successful deploy.
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Maven Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Java ${{ inputs.java-version }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+          cache: maven
+          # Writes a ~/.m2/settings.xml server entry (id `github`) so Maven can
+          # authenticate to GitHub Packages. `server-username`/`server-password`
+          # are environment variable NAMES (not values); Maven resolves them at
+          # runtime, so GITHUB_TOKEN must be exported to the Maven step below.
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Set up build prerequisites
+        if: ${{ inputs.setup-command != '' }}
+        run: ${{ inputs.setup-command }}
+
+      - name: Build custom PostgreSQL image
+        run: ${{ inputs.postgres-image-script }} ${{ inputs.postgres-version }}
+
+      - name: Derive the version from the tag
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build, test and deploy
+        run: >-
+          ${{ inputs.maven-command }}
+          -Drevision="$REVISION"
+          -Dpostgres.image=${{ inputs.postgres-image-prefix }}${{ inputs.postgres-version }}
+        env:
+          REVISION: ${{ steps.version.outputs.value }}
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Create the GitHub Release
+        if: ${{ inputs.create-release }}
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes --title "$GITHUB_REF_NAME"
+        env:
+          GH_TOKEN: ${{ github.token }}
