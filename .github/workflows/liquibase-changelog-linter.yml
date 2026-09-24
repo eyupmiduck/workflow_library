@@ -81,7 +81,8 @@ jobs:
 
       # The version is read from the POM (single source of truth) rather than
       # repeated here, and the executable `cli` classifier jar is fetched from
-      # GitHub Packages.
+      # GitHub Packages. The output directory is relative to the module's
+      # basedir, so it is written to <module>/target/linter-cli.
       - name: Fetch the linter CLI
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -95,7 +96,7 @@ jobs:
           ./mvnw --batch-mode --no-transfer-progress -q -pl "${MODULE}" \
             org.apache.maven.plugins:maven-dependency-plugin:3.8.1:copy \
             -Dartifact="${ARTIFACT}:${version}:jar:${CLASSIFIER}" \
-            -DoutputDirectory="${MODULE}/target/linter-cli"
+            -DoutputDirectory=target/linter-cli
 
       - name: Lint the changelog (SARIF)
         # A non-zero exit is expected when the changelog has a finding; the
