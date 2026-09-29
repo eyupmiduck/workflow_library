@@ -2,6 +2,8 @@ name: Dependabot Auto-merge
 
 # Reusable auto-merge for Dependabot pull requests. Queues `gh pr merge --auto`
 # for minor and patch updates and leaves major updates for a human to review.
+# Set `grouped-only` to auto-merge only PRs that Dependabot grouped, so
+# dependencies the caller keeps out of the bulk group still get a review.
 #
 # The caller must trigger on `pull_request_target` and grant `contents: write`
 # and `pull-requests: write`: a run triggered by Dependabot on `pull_request`
@@ -18,6 +20,10 @@ on:
         description: Merge method passed to `gh pr merge`; one of merge, squash or rebase.
         type: string
         default: merge
+      grouped-only:
+        description: Only auto-merge PRs that belong to a Dependabot dependency group.
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -37,12 +43,15 @@ jobs:
 
       # update-type is the highest semver change in the PR, so a grouped
       # minor/patch PR reports semver-minor at most and a major update never
-      # matches. The merge is only queued: it waits for the caller's required
-      # checks and is dropped if they fail.
+      # matches. With grouped-only the PR must also belong to a dependency
+      # group, which keeps individually raised updates for a human. The merge
+      # is only queued: it waits for the caller's required checks and is
+      # dropped if they fail.
       - name: Enable auto-merge for minor and patch updates
         if: >-
-          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-patch'
+          (steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-patch') &&
+          (inputs.grouped-only == false || steps.metadata.outputs.dependency-group != '')
         run: gh pr merge --auto --${{ inputs.merge-method }} "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
