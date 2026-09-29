@@ -1,0 +1,58 @@
+name: Dependabot Auto-merge
+
+# Reusable auto-merge for Dependabot pull requests. Queues `gh pr merge --auto`
+# for minor and patch updates and leaves major updates for a human to review.
+# Set `grouped-only` to auto-merge only PRs that Dependabot grouped, so
+# dependencies the caller keeps out of the bulk group still get a review.
+#
+# The caller must trigger on `pull_request_target` and grant `contents: write`
+# and `pull-requests: write`: a run triggered by Dependabot on `pull_request`
+# receives a read-only GITHUB_TOKEN, which cannot enable auto-merge. The
+# workflow never checks out or runs the pull request's code.
+#
+# Auto-merge is only a gate if the target branch has a protection rule that
+# requires status checks. Without one GitHub has nothing to wait for and
+# `--auto` merges immediately.
+on:
+  workflow_call:
+    inputs:
+      merge-method:
+        description: Merge method passed to `gh pr merge`; one of merge, squash or rebase.
+        type: string
+        default: merge
+      grouped-only:
+        description: Only auto-merge PRs that belong to a Dependabot dependency group.
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Enable auto-merge
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      # update-type is the highest semver change in the PR, so a grouped
+      # minor/patch PR reports semver-minor at most and a major update never
+      # matches. With grouped-only the PR must also belong to a dependency
+      # group, which keeps individually raised updates for a human. The merge
+      # is only queued: it waits for the caller's required checks and is
+      # dropped if they fail.
+      - name: Enable auto-merge for minor and patch updates
+        if: >-
+          (steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-patch') &&
+          (inputs.grouped-only == false || steps.metadata.outputs.dependency-group != '')
+        run: gh pr merge --auto --${{ inputs.merge-method }} "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ github.token }}
