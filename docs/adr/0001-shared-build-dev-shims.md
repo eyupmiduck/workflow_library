@@ -9,18 +9,18 @@
 `dml_utils` and `ddl_utils` carry the same development and build shims. Most are
 identical or differ by a single project token:
 
-| File | Difference between the repos |
-|------|------------------------------|
-| `scripts/start-local-db.sh`, `stop-local-db.sh`, `refresh-local-db.sh` | identical |
-| `scripts/lib.sh` | `printf 'dml_utils_%s'` vs `printf 'ddl_utils_%s'` |
-| `scripts/sqlfluff-fix.sh` | changelog module directory |
-| `scripts/cut-release.sh` | one repository URL |
-| `.sqlfluff` | `max_line_length` 120 vs 100 |
-| `scripts/build-postgres-image.sh` | dml_utils derives a collision-safe tag; ddl_utils is simpler |
-| `docker/postgres/Dockerfile` | dml_utils additionally builds `pg_background` |
-| `docker/postgres/roles.sql` | project prefix; dml_utils additionally reconciles roles, owns the `liquibase` schema, and grants `pgbackground_role` |
-| `compose.yaml` | prefix, database name, host port (dml_utils 5433, ddl_utils 5432) |
-| `docker_java_config/pom.xml` | parent artifactId only |
+| File                                                                   | Difference between the repos                                                                                         |
+|------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| `scripts/start-local-db.sh`, `stop-local-db.sh`, `refresh-local-db.sh` | identical                                                                                                            |
+| `scripts/lib.sh`                                                       | `printf 'dml_utils_%s'` vs `printf 'ddl_utils_%s'`                                                                   |
+| `scripts/sqlfluff-fix.sh`                                              | changelog module directory                                                                                           |
+| `scripts/cut-release.sh`                                               | one repository URL                                                                                                   |
+| `.sqlfluff`                                                            | `max_line_length` 120 vs 100                                                                                         |
+| `scripts/build-postgres-image.sh`                                      | dml_utils derives a collision-safe tag; ddl_utils is simpler                                                         |
+| `docker/postgres/Dockerfile`                                           | dml_utils additionally builds `pg_background`                                                                        |
+| `docker/postgres/roles.sql`                                            | project prefix; dml_utils additionally reconciles roles, owns the `liquibase` schema, and grants `pgbackground_role` |
+| `compose.yaml`                                                         | prefix, database name, host port (dml_utils 5433, ddl_utils 5432)                                                    |
+| `docker_java_config/pom.xml`                                           | parent artifactId only                                                                                               |
 
 GitHub Actions workflows are **already** shared through `workflow_library`
 (reusable workflows pinned by commit SHA; the per-repo workflow files are thin
@@ -48,8 +48,8 @@ project as a git submodule mounted at `scripts/`.**
    a repo-specific script must live outside it.
 
 2. **Project identity is parameterized, not copied.** The shared scripts derive
-   the project prefix from the repository-root directory basename, normalized
-   (`dml_utils` -> `dml-utils-`), and the changelog module from the same
+   the project prefix from the repository-root directory basename, normalized (`dml_utils` -> `dml-utils-`), and the
+   changelog module from the same
    basename (`dml_utils`). A root `.shimrc` (or the `PROJECT`/`PROJECT_PREFIX`
    environment) overrides both. CI passes the prefix explicitly. No script
    hardcodes `dml`/`ddl`.

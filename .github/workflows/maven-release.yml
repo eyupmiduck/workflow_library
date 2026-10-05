@@ -15,14 +15,10 @@ on:
         description: PostgreSQL base image tag the release is built and tested against.
         type: string
         default: postgres:17-alpine
-      postgres-image-script:
-        description: Script that builds the custom PostgreSQL image; receives the base tag as its first argument.
+      project:
+        description: Project name (repository basename, e.g. dml_utils); used for the image tag and roles.
         type: string
-        default: scripts/build-postgres-image.sh
-      postgres-image-prefix:
-        description: Prefix for the built PostgreSQL image tag; the postgres version is appended.
-        type: string
-        default: ddl-utils-
+        required: true
       setup-command:
         description: Optional shell command to install build prerequisites (for example SQLFluff) before building; empty skips it.
         type: string
@@ -49,6 +45,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # The shared build/dev shims live in the workflow_library submodule at
+          # scripts/ (including postgres/ and build-postgres-image.sh).
+          submodules: true
 
       - name: Set up Java ${{ inputs.java-version }}
         uses: actions/setup-java@v5
@@ -69,17 +69,20 @@ jobs:
         run: ${{ inputs.setup-command }}
 
       - name: Build custom PostgreSQL image
-        run: ${{ inputs.postgres-image-script }} ${{ inputs.postgres-version }}
+        env:
+          PROJECT: ${{ inputs.project }}
+        run: scripts/build-postgres-image.sh ${{ inputs.postgres-version }}
 
       - name: Derive the version from the tag
         id: version
         run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Build, test and deploy
-        run: >-
-          ${{ inputs.maven-command }}
-          -Drevision="$REVISION"
-          -Dpostgres.image=${{ inputs.postgres-image-prefix }}${{ inputs.postgres-version }}
+        run: |
+          prefix="$(printf '%s' '${{ inputs.project }}' | tr '_' '-')-"
+          ${{ inputs.maven-command }} \
+            -Drevision="$REVISION" \
+            -Dpostgres.image="${prefix}${{ inputs.postgres-version }}"
         env:
           REVISION: ${{ steps.version.outputs.value }}
           GITHUB_TOKEN: ${{ github.token }}
