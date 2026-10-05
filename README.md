@@ -24,8 +24,8 @@ The repository root is the shared shim directory. Each project mounts this
 repository as a git submodule at `scripts/`, so the files appear as
 `scripts/<name>` in the consumer:
 
-- `postgres/Dockerfile`, `postgres/roles.sql.tmpl` — the custom PostgreSQL image
-  (roles, `plpgsql_check`, `pg_background`). The project name is rendered into
+- `postgres/Dockerfile`, `postgres/roles.sql.tmpl` — the custom PostgreSQL image (roles, `plpgsql_check`,
+  `pg_background`). The project name is rendered into
   `roles.sql` at build time from the `PROJECT` build arg.
 - `build-postgres-image.sh` — builds `<project>-utils-postgres:<tag>` from the
   base image, deriving the tag and roles from the project name.
