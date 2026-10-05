@@ -1,0 +1,52 @@
+# Shared local development stack for the projects that mount this repository at
+# scripts/. The project name and image are supplied by the local-DB scripts
+# (PROJECT, POSTGRES_IMAGE) and a project-specific .env (for example HOST_PORT);
+# run it through scripts/start-local-db.sh rather than directly.
+#
+# The postgres image MUST be the custom image built by
+# scripts/build-postgres-image.sh: its init script creates the
+# <project>_owner role and the `liquibase` schema the migration relies on, and
+# installs pg_background and plpgsql_check. A stock postgres image only creates
+# the `postgres` role, so the migration would fail. Because that init script runs
+# only on first initialization, changing the image (or adding roles) against an
+# existing <project>_pgdata volume does not re-run it: use
+# scripts/refresh-local-db.sh to recreate the volume after such a change.
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:?POSTGRES_IMAGE must be set (run scripts/start-local-db.sh)}
+    environment:
+      POSTGRES_DB: ${PROJECT:?PROJECT must be set}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    # Bind to loopback only. HOST_PORT defaults to 5432; a project that wants to
+    # run alongside another sets HOST_PORT in its .env (for example 5433).
+    ports:
+      - "127.0.0.1:${HOST_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d ${PROJECT}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  liquibase:
+    image: liquibase/liquibase:5.0.4
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Retry once on a transient failure (for example the driver download); a
+    # persistent migration error should surface, not loop forever. The update
+    # itself is idempotent.
+    restart: on-failure:1
+    volumes:
+      - ./${PROJECT}/src/main/resources/db/changelog:/liquibase/changelog
+    # `lpm add postgresql` downloads the JDBC driver on each run, so a local
+    # migration needs network access to the package registry. The dev-only
+    # credentials match the postgres service above. The tracking tables live in
+    # the dedicated `liquibase` schema (created by the image's init script).
+    command: sh -c "lpm add postgresql --global && liquibase --url=jdbc:postgresql://postgres:5432/${PROJECT} --username=${PROJECT}_owner --password=${PROJECT}_owner --changelog-file=changelog/db.changelog-master.xml --liquibase-schema-name=liquibase --database-changelog-table-name=${PROJECT}_databasechangelog --database-changelog-lock-table-name=${PROJECT}_databasechangeloglock update"
+
+volumes:
+  pgdata:
+    name: ${PROJECT}_pgdata
