@@ -3,6 +3,9 @@ name: Maven Release
 # Reusable tag-driven Maven release: derives the version from the pushed tag,
 # runs the full build (deploy includes verify), deploys to the registry
 # configured in the project POM, then opens the matching GitHub Release.
+# Optionally, it opens a follow-up PR that bumps the root POM's <revision> to
+# the next patch snapshot, so local builds keep a current development version
+# (the tag remains the source of truth for the release itself).
 # The caller owns the `v*` tag trigger and the top-level concurrency.
 on:
   workflow_call:
@@ -31,10 +34,26 @@ on:
         description: Create a GitHub Release for the tag after a successful deploy.
         type: boolean
         default: true
+      bump-snapshot:
+        description: >-
+          After a successful release, open a PR that bumps the root POM's
+          <revision> to the next patch snapshot (e.g. 1.0.0 -> 1.0.1-SNAPSHOT).
+          Requires the release-token secret.
+        type: boolean
+        default: false
+    secrets:
+      release-token:
+        description: >-
+          Token (a PAT or GitHub App token with contents and pull-requests
+          write) used to open the bump PR, so its workflow runs are triggered.
+          The default GITHUB_TOKEN is not accepted: GitHub suppresses workflow
+          runs for events it creates, which would leave the PR without checks.
+        required: false
 
 permissions:
   contents: write
   packages: write
+  pull-requests: write
 
 jobs:
   release:
@@ -92,3 +111,45 @@ jobs:
         run: gh release create "$GITHUB_REF_NAME" --generate-notes --title "$GITHUB_REF_NAME"
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - name: Open the next-snapshot bump PR
+        if: ${{ inputs.bump-snapshot }}
+        env:
+          # The PAT/App token is used for `gh pr create` so the pull_request
+          # event is attributed to it and the PR's checks actually run; the
+          # branch push itself uses the checkout's GITHUB_TOKEN.
+          RELEASE_TOKEN: ${{ secrets.release-token }}
+          REVISION: ${{ steps.version.outputs.value }}
+        run: |
+          set -eu
+          if [ -z "${RELEASE_TOKEN:-}" ]; then
+            echo "::error::bump-snapshot is enabled but the release-token secret is empty. Set it to a PAT or GitHub App token with contents and pull-requests write."
+            exit 1
+          fi
+          new="$(scripts/bump-snapshot.sh --print "$REVISION")"
+          branch="chore/bump-snapshot-$new"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "branch $branch already exists; leaving it alone"
+            exit 0
+          fi
+          # Base the bump on the latest main, not the (possibly older) tagged
+          # commit the checkout is sitting on.
+          git fetch --quiet origin main
+          git checkout -B "$branch" origin/main
+          scripts/bump-snapshot.sh "$REVISION" >/dev/null
+          if git diff --quiet; then
+            echo "root POM is already at $new; nothing to do"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: bump revision to $new"
+          git push origin "$branch"
+          GH_TOKEN="$RELEASE_TOKEN" gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "chore: bump revision to $new" \
+            --body "Automated follow-up to the $GITHUB_REF_NAME release: set the root POM's \`<revision>\` to \`$new\` for local/snapshot builds. The tag stays the source of truth for the released version, so this POM change is for development only."
+          GH_TOKEN="$RELEASE_TOKEN" gh pr merge "$branch" --auto --squash \
+            || echo "::warning::could not enable auto-merge for $branch; merge it manually once checks pass"
+          echo "Opened $branch (auto-merge requested)."
