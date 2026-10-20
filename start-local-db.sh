@@ -22,6 +22,14 @@ export POSTGRES_IMAGE
 
 cd "$repo_root"
 
+# Unpack the versioned ddl_utils changelog into the project's build output so
+# the liquibase service can install it; repositories without the unpack step
+# (ddl_utils itself) skip this.
+if [ -x "$repo_root/mvnw" ] \
+        && grep -q 'unpack-ddl-utils-changelog' "$repo_root/$PROJECT/pom.xml" 2>/dev/null; then
+    ./mvnw -q -pl "$PROJECT" -am initialize
+fi
+
 if ! command -v docker >/dev/null 2>&1; then
     echo "docker is required but was not found on PATH" >&2
     exit 1

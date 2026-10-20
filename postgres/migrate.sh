@@ -1,6 +1,6 @@
 #!/bin/sh
-# Apply the local-development changelogs: ddl_utils first (when this checkout
-# has the ddl_utils submodule), then the project's own changelog.
+# Apply the local-development changelogs: ddl_utils first (when the checkout
+# has the unpacked ddl_utils changelog), then the project's own changelog.
 #
 # Run inside the `liquibase` service by scripts/compose.yaml. PROJECT is supplied
 # by the compose environment; the repository root is mounted at /repo.
@@ -31,10 +31,11 @@ update_changelog() {
         update
 }
 
-# dml_utils assumes ddl_utils is installed in the same database. Install it
-# first when the checkout includes the submodule; the ddl_utils repository has
-# no such path and skips this step.
-ddl_utils_changelog="ddl_utils/ddl_utils/src/main/resources/db/changelog/db.changelog-master.xml"
+# dml_utils assumes ddl_utils is installed in the same database. The versioned
+# ddl_utils dependency is unpacked into the project's build output by
+# scripts/start-local-db.sh and scripts/refresh-local-db.sh; the ddl_utils
+# repository has no such path and skips this step.
+ddl_utils_changelog="${PROJECT}/target/classes/db/changelog-install/ddl-utils/db/changelog/db.changelog-master.xml"
 if [ -f "$ddl_utils_changelog" ]; then
     update_changelog \
         ddl_utils_databasechangelog \
