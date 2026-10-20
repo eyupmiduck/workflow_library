@@ -40,12 +40,18 @@ services:
     # itself is idempotent.
     restart: on-failure:1
     volumes:
-      - ./${PROJECT}/src/main/resources/db/changelog:/liquibase/changelog
+      # The whole checkout, so the script can apply both the sibling ddl_utils
+      # changelog (when present) and the project's own changelog.
+      - .:/repo
+    environment:
+      PROJECT: ${PROJECT:?PROJECT must be set}
     # `lpm add postgresql` downloads the JDBC driver on each run, so a local
     # migration needs network access to the package registry. The dev-only
     # credentials match the postgres service above. The tracking tables live in
     # the dedicated `liquibase` schema (created by the image's init script).
-    command: sh -c "lpm add postgresql --global && liquibase --url=jdbc:postgresql://postgres:5432/${PROJECT} --username=${PROJECT}_owner --password=${PROJECT}_owner --changelog-file=changelog/db.changelog-master.xml --liquibase-schema-name=liquibase --database-changelog-table-name=${PROJECT}_databasechangelog --database-changelog-lock-table-name=${PROJECT}_databasechangeloglock update"
+    # scripts/postgres/migrate.sh applies ddl_utils first when this checkout has
+    # the ddl_utils submodule, then the project changelog.
+    command: ["sh", "/repo/scripts/postgres/migrate.sh"]
 
 volumes:
   pgdata:
