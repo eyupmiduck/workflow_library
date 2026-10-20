@@ -30,13 +30,16 @@ repository as a git submodule at `scripts/`, so the files appear as
 `scripts/<name>` in the consumer:
 
 - `postgres/Dockerfile`, `postgres/roles.sql.tmpl` — the custom PostgreSQL image (roles, `plpgsql_check`,
-  `pg_background`). The project name is rendered into
+  `pg_background`), plus the sibling `ddl_utils_caller` role. The project name is rendered into
   `roles.sql` at build time from the `PROJECT` build arg.
 - `build-postgres-image.sh` — builds `<project>-utils-postgres:<tag>` from the
   base image, deriving the tag and roles from the project name.
 - `lib.sh` — `resolve_repo_root`, `project_name` and `compose_project_name`.
-- `compose.yaml` — the local stack, parameterized by `PROJECT`, `POSTGRES_IMAGE`
-  and `HOST_PORT` (set by the scripts; `HOST_PORT` from a project `.env`).
+- `compose.yaml` + `postgres/migrate.sh` — the local stack, parameterized by
+  `PROJECT`, `POSTGRES_IMAGE` and `HOST_PORT` (set by the scripts; `HOST_PORT`
+  from a project `.env`). `migrate.sh` applies a sibling `ddl_utils` changelog
+  first when the consumer has the `ddl_utils` submodule, then the project
+  changelog.
 - `start-local-db.sh`, `stop-local-db.sh`, `refresh-local-db.sh` — run the local
   Docker Compose stack from `compose.yaml`.
 - `sqlfluff-fix.sh` — SQLFluff auto-fix for the changelog module.
