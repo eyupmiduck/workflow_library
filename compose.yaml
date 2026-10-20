@@ -51,7 +51,7 @@ services:
     # the dedicated `liquibase` schema (created by the image's init script).
     # scripts/postgres/migrate.sh applies ddl_utils first when the project build
     # output has the unpacked changelog, then the project changelog.
-    command: ["sh", "/repo/scripts/postgres/migrate.sh"]
+    command: [ "sh", "/repo/scripts/postgres/migrate.sh" ]
 
 volumes:
   pgdata:
