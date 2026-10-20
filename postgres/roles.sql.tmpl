@@ -76,3 +76,19 @@ GRANT __PROJECT___caller TO __PROJECT___test;
 -- launch background workers.
 GRANT pgbackground_role TO __PROJECT___caller;
 GRANT pgbackground_role TO __PROJECT___test;
+
+-- dml_utils assumes ddl_utils is installed in the same database. Create the
+-- role its grants target and let the project roles call its helpers. For the
+-- ddl_utils image this is the project's own caller role, so the block is
+-- idempotent.
+DO
+$$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'ddl_utils_caller') THEN
+            CREATE ROLE ddl_utils_caller;
+        END IF;
+    END
+$$;
+
+GRANT ddl_utils_caller TO __PROJECT___owner;
+GRANT ddl_utils_caller TO __PROJECT___test;
