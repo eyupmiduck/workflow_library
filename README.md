@@ -37,8 +37,8 @@ repository as a git submodule at `scripts/`, so the files appear as
 - `lib.sh` — `resolve_repo_root`, `project_name` and `compose_project_name`.
 - `compose.yaml` + `postgres/migrate.sh` — the local stack, parameterized by
   `PROJECT`, `POSTGRES_IMAGE` and `HOST_PORT` (set by the scripts; `HOST_PORT`
-  from a project `.env`). `migrate.sh` applies a sibling `ddl_utils` changelog
-  first when the consumer has the `ddl_utils` submodule, then the project
+  from a project `.env`). `migrate.sh` applies the unpacked `ddl_utils` changelog
+  from the project build output first (when present), then the project
   changelog.
 - `start-local-db.sh`, `stop-local-db.sh`, `refresh-local-db.sh` — run the local
   Docker Compose stack from `compose.yaml`.

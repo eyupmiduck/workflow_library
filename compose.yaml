@@ -40,7 +40,7 @@ services:
     # itself is idempotent.
     restart: on-failure:1
     volumes:
-      # The whole checkout, so the script can apply both the sibling ddl_utils
+      # The whole checkout, so the script can apply the unpacked ddl_utils
       # changelog (when present) and the project's own changelog.
       - .:/repo
     environment:
@@ -49,8 +49,8 @@ services:
     # migration needs network access to the package registry. The dev-only
     # credentials match the postgres service above. The tracking tables live in
     # the dedicated `liquibase` schema (created by the image's init script).
-    # scripts/postgres/migrate.sh applies ddl_utils first when this checkout has
-    # the ddl_utils submodule, then the project changelog.
+    # scripts/postgres/migrate.sh applies ddl_utils first when the project build
+    # output has the unpacked changelog, then the project changelog.
     command: ["sh", "/repo/scripts/postgres/migrate.sh"]
 
 volumes:
