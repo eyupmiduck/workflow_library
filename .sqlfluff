@@ -24,3 +24,8 @@ spacing_before = any
 
 [sqlfluff:layout:type:column_constraint_segment]
 spacing_before = any
+
+# IntelliJ writes a space between the ARRAY keyword and its constructor
+# bracket (ARRAY [...]). Allow that instead of forcing the brackets to touch.
+[sqlfluff:layout:type:start_square_bracket]
+spacing_before = any
